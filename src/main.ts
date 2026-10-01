@@ -2,7 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { loadAlwaysOnTop } from "./preferences";
-import { formatResetRemaining, formatUpdatedAt, severityClass } from "./format";
+import { HIDDEN_TRACKS_KEY, loadHiddenTracks } from "./display-preferences";
+import { formatResetRemaining, formatTrackCaption, formatUpdatedAt, severityClass } from "./format";
 import type { TrackUsage, UsageSnapshot } from "./types";
 
 const WINDOW_WIDTH = 340;
@@ -52,17 +53,20 @@ function buildTrack(track: TrackUsage): HTMLElement {
   const label = document.createElement("span");
   label.className = "label";
   label.textContent = track.label;
+  label.title = track.label;
 
   const caption = document.createElement("span");
   caption.className = "caption";
-  const remaining = formatResetRemaining(track.resetsAt);
-  caption.dataset.resetsAt = track.resetsAt === null ? "" : String(track.resetsAt);
-  caption.dataset.percent = String(track.percent);
-  caption.textContent = remaining
-    ? `${Math.round(track.percent)}% · ${remaining}`
-    : `${Math.round(track.percent)}%`;
+  caption.textContent = formatTrackCaption(track);
+  caption.title = caption.textContent;
 
   row.append(label, caption);
+  section.append(row);
+
+  // 잔액·예상 횟수는 총량이 없어서 숫자만 표시합니다.
+  if (track.percent === null) return section;
+  caption.dataset.resetsAt = track.resetsAt === null ? "" : String(track.resetsAt);
+  caption.dataset.percent = String(track.percent);
 
   const bar = document.createElement("div");
   bar.className = "bar";
@@ -79,7 +83,13 @@ function buildTrack(track: TrackUsage): HTMLElement {
   fill.style.width = `${Math.max(0, Math.min(100, track.percent))}%`;
 
   bar.append(fill);
-  section.append(row, bar);
+  section.append(bar);
+  if (track.value) {
+    const detail = document.createElement("div");
+    detail.className = "track-detail";
+    detail.textContent = track.value;
+    section.append(detail);
+  }
   return section;
 }
 
@@ -115,8 +125,12 @@ function render(snap: UsageSnapshot) {
   const tracks = $("tracks");
   tracks.replaceChildren();
 
-  if (snap.tracks.length > 0) {
-    tracks.append(...snap.tracks.map(buildTrack));
+  const hidden = loadHiddenTracks();
+  const visibleTracks = snap.tracks.filter((track) => !hidden.has(track.kind));
+  if (visibleTracks.length > 0) {
+    tracks.append(...visibleTracks.map(buildTrack));
+  } else if (snap.state === "OK" && snap.tracks.length > 0) {
+    tracks.append(renderEmpty("설정에서 표시할 사용량을 선택하세요"));
   } else if (snap.state === "NeedLogin") {
     tracks.append(renderEmpty("Codex에서 ChatGPT 계정으로 로그인하세요"));
   } else if (snap.state === "OK") {
@@ -232,6 +246,15 @@ async function boot() {
     void refresh();
   });
 
+  // 표시만 다시 그립니다. 설정 토글은 네트워크 갱신을 일으키지 않습니다.
+  const renderPreferences = () => {
+    if (lastSnapshot) render(lastSnapshot);
+  };
+  await listen("track-visibility-changed", renderPreferences);
+  window.addEventListener("storage", (event) => {
+    if (event.key === HIDDEN_TRACKS_KEY || event.key === null) renderPreferences();
+  });
+
   await refresh();
   let interval = 300_000;
   try {
@@ -244,10 +267,11 @@ async function boot() {
   }, interval);
   // 리셋까지 남은 시간은 네트워크 조회와 별개로 갱신합니다.
   window.setInterval(() => {
-    document.querySelectorAll<HTMLElement>(".caption").forEach((caption) => {
+    document.querySelectorAll<HTMLElement>(".caption[data-percent]").forEach((caption) => {
       const remaining = formatResetRemaining(caption.dataset.resetsAt ? Number(caption.dataset.resetsAt) : null);
       const percent = Math.round(Number(caption.dataset.percent));
       caption.textContent = remaining ? `${percent}% · ${remaining}` : `${percent}%`;
+      caption.title = caption.textContent;
     });
   }, 60_000);
 }

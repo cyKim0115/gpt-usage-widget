@@ -1,0 +1,21 @@
+{
+  "plan_type": "business",
+  "rate_limit": {"primary_window": {"used_percent": 20, "limit_window_seconds": 18000}},
+  "credits": {
+    "has_credits": true,
+    "unlimited": false,
+    "balance": "125.50",
+    "approx_local_messages": [25, 100],
+    "approx_cloud_messages": [5, 20]
+  },
+  "spend_control": {
+    "reached": false,
+    "individual_limit": {
+      "used": "750",
+      "limit": "1000",
+      "used_percent": 75,
+      "reset_after_seconds": 3600
+    }
+  },
+  "rate_limit_reset_credits": {"available_count": 3, "applicable_available_count": 2}
+}

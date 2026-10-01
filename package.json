@@ -13,7 +13,7 @@
     "start:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/launch-user.ps1",
     "rebuild:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/rebuild-restart.ps1",
     "spike": "python scripts/spike_usage.py",
-    "test": "tsc src/format.ts --outDir .test-dist --module ESNext --target ES2020 && node --test tests/*.test.mjs"
+    "test": "tsc src/format.ts src/display-preferences.ts --outDir .test-dist --module ESNext --target ES2020 && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2"

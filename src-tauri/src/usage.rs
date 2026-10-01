@@ -28,8 +28,9 @@ pub enum UsageError {
 pub struct TrackUsage {
     pub label: String,
     pub kind: String,
-    pub percent: f64,
+    pub percent: Option<f64>,
     pub resets_at: Option<i64>,
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +51,9 @@ struct UsageResponse {
     rate_limit: Option<RateLimit>,
     code_review_rate_limit: Option<RateLimit>,
     additional_rate_limits: Option<Vec<AdditionalLimit>>,
+    credits: Option<serde_json::Value>,
+    spend_control: Option<serde_json::Value>,
+    rate_limit_reset_credits: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -113,10 +117,136 @@ fn append_tracks(
         tracks.push(TrackUsage {
             label,
             kind: format!("{kind}:{slot}"),
-            percent: window.used_percent.clamp(0.0, 100.0),
+            percent: Some(window.used_percent.clamp(0.0, 100.0)),
             resets_at,
+            value: None,
         });
     }
+}
+
+// 크레딧 잔액과 횟수에는 전체 한도가 없으므로 사용률을 만들어 내지 않습니다.
+fn append_value(tracks: &mut Vec<TrackUsage>, kind: &str, label: &str, value: String) {
+    tracks.push(TrackUsage {
+        label: label.into(),
+        kind: kind.into(),
+        percent: None,
+        resets_at: None,
+        value: Some(value),
+    });
+}
+
+fn numeric_value(value: Option<&serde_json::Value>) -> Option<f64> {
+    let value = value?;
+    let number = value
+        .as_f64()
+        .or_else(|| value.as_str()?.trim().parse::<f64>().ok())?;
+    (number.is_finite() && number >= 0.0).then_some(number)
+}
+
+fn message_range(value: Option<&serde_json::Value>) -> Option<String> {
+    let range = value?.as_array()?;
+    if range.len() != 2 {
+        return None;
+    }
+    let min = numeric_value(range.first())?;
+    let max = numeric_value(range.get(1))?;
+    if min > max || min.fract() != 0.0 || max.fract() != 0.0 {
+        return None;
+    }
+    Some(if min == max {
+        format!("약 {min}회")
+    } else {
+        format!("약 {min}–{max}회")
+    })
+}
+
+fn append_credit_tracks(tracks: &mut Vec<TrackUsage>, credits: &serde_json::Value) {
+    if !credits.is_object() {
+        return;
+    }
+    let unlimited = credits.get("unlimited").and_then(|v| v.as_bool()) == Some(true);
+    let balance = numeric_value(credits.get("balance"));
+    let value = if unlimited {
+        "무제한".into()
+    } else if let Some(balance) = balance {
+        format!("{balance} 크레딧 남음")
+    } else {
+        match credits.get("has_credits").and_then(|v| v.as_bool()) {
+            Some(false) => "크레딧 없음".into(),
+            Some(true) => "잔액 정보 없음".into(),
+            None => return,
+        }
+    };
+    append_value(tracks, "credits:balance", "크레딧 잔액", value);
+    if !unlimited {
+        for (field, kind, label) in [
+            (
+                "approx_local_messages",
+                "credits:local",
+                "크레딧 · 로컬 작업",
+            ),
+            (
+                "approx_cloud_messages",
+                "credits:cloud",
+                "크레딧 · 클라우드 작업",
+            ),
+        ] {
+            if let Some(value) = message_range(credits.get(field)) {
+                append_value(tracks, kind, label, value);
+            }
+        }
+    }
+}
+
+fn append_reset_credits(tracks: &mut Vec<TrackUsage>, credits: &serde_json::Value) {
+    let Some(available) = numeric_value(credits.get("available_count")) else {
+        return;
+    };
+    if available.fract() != 0.0 {
+        return;
+    }
+    let applicable = numeric_value(credits.get("applicable_available_count"))
+        .filter(|count| count.fract() == 0.0 && *count <= available);
+    let value = match applicable {
+        Some(count) => format!("{available}회 · 사용 가능 {count}회"),
+        None => format!("{available}회 남음"),
+    };
+    append_value(tracks, "credits:resets", "한도 초기화", value);
+}
+
+fn append_spend_limit(tracks: &mut Vec<TrackUsage>, control: &serde_json::Value, now: i64) {
+    let Some(limit) = control.get("individual_limit").filter(|v| v.is_object()) else {
+        return;
+    };
+    let amounts = numeric_value(limit.get("used")).zip(numeric_value(limit.get("limit")));
+    let percent = numeric_value(limit.get("used_percent"))
+        .or_else(|| numeric_value(limit.get("remaining_percent")).map(|p| 100.0 - p))
+        .or_else(|| {
+            amounts
+                .filter(|(_, total)| *total > 0.0)
+                .map(|(used, total)| used / total * 100.0)
+        });
+    let Some(percent) = percent.filter(|p| p.is_finite()) else {
+        return;
+    };
+    let resets_at = limit
+        .get("reset_at")
+        .and_then(|v| v.as_i64())
+        .filter(|t| *t > 0)
+        .or_else(|| {
+            limit
+                .get("reset_after_seconds")
+                .and_then(|v| v.as_i64())
+                .filter(|s| *s >= 0)
+                .and_then(|s| now.checked_add(s))
+        });
+    tracks.push(TrackUsage {
+        label: "개인 사용 한도".into(),
+        kind: "spend-control:individual".into(),
+        percent: Some(percent.clamp(0.0, 100.0)),
+        resets_at,
+        value: amounts.map(|(used, total)| format!("{used} / {total} 크레딧 사용")),
+    });
 }
 
 fn plan_label(plan: &str) -> String {
@@ -157,6 +287,15 @@ pub fn parse_usage(raw: &str, now: i64) -> Result<UsageSnapshot, UsageError> {
             .unwrap_or_else(|| format!("additional-{index}"));
         let name = limit.limit_name.as_deref().unwrap_or(&kind);
         append_tracks(&mut tracks, limit.rate_limit, Some(name), &kind, now);
+    }
+    if let Some(control) = response.spend_control {
+        append_spend_limit(&mut tracks, &control, now);
+    }
+    if let Some(credits) = response.credits {
+        append_credit_tracks(&mut tracks, &credits);
+    }
+    if let Some(credits) = response.rate_limit_reset_credits {
+        append_reset_credits(&mut tracks, &credits);
     }
     Ok(UsageSnapshot {
         state: "OK".into(),
@@ -230,7 +369,10 @@ mod tests {
             snapshot.tracks.len()
         );
         for track in snapshot.tracks {
-            println!("{}: {}%", track.label, track.percent);
+            println!(
+                "{}: percent={:?}, value={:?}",
+                track.label, track.percent, track.value
+            );
         }
     }
 
@@ -239,7 +381,7 @@ mod tests {
         let snapshot = parse_usage(include_str!("../tests/fixtures/plus.json"), 100).unwrap();
         assert_eq!(snapshot.tracks.len(), 2);
         assert_eq!(snapshot.tracks[0].label, "5시간");
-        assert_eq!(snapshot.tracks[0].percent, 32.0);
+        assert_eq!(snapshot.tracks[0].percent, Some(32.0));
         assert_eq!(snapshot.tracks[0].resets_at, Some(18_100));
         assert_eq!(snapshot.tracks[1].label, "주간");
         assert_eq!(snapshot.plan_label.as_deref(), Some("Plus"));
@@ -248,9 +390,11 @@ mod tests {
     #[test]
     fn weekly_primary_is_not_mislabeled_as_session() {
         let snapshot = parse_usage(include_str!("../tests/fixtures/prolite.json"), 100).unwrap();
-        assert_eq!(snapshot.tracks.len(), 1);
+        assert_eq!(snapshot.tracks.len(), 2);
         assert_eq!(snapshot.tracks[0].label, "주간");
-        assert_eq!(snapshot.tracks[0].percent, 41.0);
+        assert_eq!(snapshot.tracks[0].percent, Some(41.0));
+        assert_eq!(snapshot.tracks[1].kind, "credits:balance");
+        assert_eq!(snapshot.tracks[1].percent, None);
         assert_eq!(snapshot.plan_label.as_deref(), Some("Pro Lite"));
     }
 
@@ -279,9 +423,93 @@ mod tests {
     fn fallback_reset_and_unknown_duration_are_preserved() {
         let snapshot = parse_usage(r#"{"plan_type":"future","rate_limit":{"primary_window":{"used_percent":120,"limit_window_seconds":3600,"reset_after_seconds":80}}}"#, 100).unwrap();
         assert_eq!(snapshot.tracks[0].label, "1시간");
-        assert_eq!(snapshot.tracks[0].percent, 100.0);
+        assert_eq!(snapshot.tracks[0].percent, Some(100.0));
         assert_eq!(snapshot.tracks[0].resets_at, Some(180));
         assert_eq!(snapshot.plan_label.as_deref(), Some("future"));
+    }
+
+    #[test]
+    fn credit_balances_estimates_and_reset_counts_have_no_fabricated_gauges() {
+        let snapshot = parse_usage(include_str!("../tests/fixtures/credits.json"), 100).unwrap();
+        assert_eq!(snapshot.tracks.len(), 6);
+        let credits = &snapshot.tracks[2..];
+        assert!(credits
+            .iter()
+            .all(|track| track.percent.is_none() && track.resets_at.is_none()));
+        assert_eq!(credits[0].kind, "credits:balance");
+        assert_eq!(credits[0].value.as_deref(), Some("125.5 크레딧 남음"));
+        assert_eq!(credits[1].value.as_deref(), Some("약 25–100회"));
+        assert_eq!(credits[2].value.as_deref(), Some("약 5–20회"));
+        assert_eq!(credits[3].value.as_deref(), Some("3회 · 사용 가능 2회"));
+        let spend = &snapshot.tracks[1];
+        assert_eq!(spend.kind, "spend-control:individual");
+        assert_eq!(spend.percent, Some(75.0));
+        assert_eq!(spend.resets_at, Some(3700));
+        assert_eq!(spend.value.as_deref(), Some("750 / 1000 크레딧 사용"));
+    }
+
+    #[test]
+    fn unlimited_zero_and_unknown_credit_balances_are_distinct() {
+        for (credits, expected) in [
+            (
+                r#"{"unlimited":true,"balance":"0","approx_local_messages":[0,0]}"#,
+                "무제한",
+            ),
+            (r#"{"has_credits":false,"balance":0}"#, "0 크레딧 남음"),
+            (r#"{"has_credits":false,"balance":null}"#, "크레딧 없음"),
+            (r#"{"has_credits":true,"balance":null}"#, "잔액 정보 없음"),
+        ] {
+            let raw = format!(r#"{{"plan_type":"plus","credits":{credits}}}"#);
+            let snapshot = parse_usage(&raw, 100).unwrap();
+            assert_eq!(snapshot.tracks.len(), 1);
+            assert_eq!(snapshot.tracks[0].value.as_deref(), Some(expected));
+            assert_eq!(snapshot.tracks[0].percent, None);
+        }
+    }
+
+    #[test]
+    fn invalid_optional_metrics_do_not_break_existing_usage() {
+        let snapshot = parse_usage(r#"{"plan_type":"plus",
+            "rate_limit":{"primary_window":{"used_percent":20}},
+            "credits":{"balance":"NaN","approx_local_messages":[10,5],"approx_cloud_messages":[-1,10]},
+            "spend_control":{"individual_limit":{"used":"NaN","limit":"0"}},
+            "rate_limit_reset_credits":{"available_count":-1}}"#, 100).unwrap();
+        assert_eq!(snapshot.tracks.len(), 1);
+        assert_eq!(snapshot.tracks[0].percent, Some(20.0));
+    }
+
+    #[test]
+    fn spend_limit_uses_remaining_percentage_or_known_amounts() {
+        for (limit, expected) in [
+            (r#"{"remaining_percent":25,"reset_at":400}"#, 75.0),
+            (r#"{"used":"32.5","limit":"50","reset_at":400}"#, 65.0),
+            (r#"{"used_percent":120,"reset_at":400}"#, 100.0),
+        ] {
+            let raw = format!(
+                r#"{{"plan_type":"business","spend_control":{{"individual_limit":{limit}}}}}"#
+            );
+            let snapshot = parse_usage(&raw, 100).unwrap();
+            assert_eq!(snapshot.tracks.len(), 1);
+            assert_eq!(snapshot.tracks[0].percent, Some(expected));
+            assert_eq!(snapshot.tracks[0].resets_at, Some(400));
+        }
+    }
+
+    #[test]
+    fn unavailable_extras_are_omitted_and_zero_reset_counts_are_real() {
+        let snapshot = parse_usage(
+            r#"{"plan_type":"plus","credits":null,
+            "spend_control":{"reached":false,"individual_limit":null},
+            "rate_limit_reset_credits":{"available_count":0,"applicable_available_count":0}}"#,
+            100,
+        )
+        .unwrap();
+        assert_eq!(snapshot.tracks.len(), 1);
+        assert_eq!(snapshot.tracks[0].kind, "credits:resets");
+        assert_eq!(
+            snapshot.tracks[0].value.as_deref(),
+            Some("0회 · 사용 가능 0회")
+        );
     }
 
     #[test]

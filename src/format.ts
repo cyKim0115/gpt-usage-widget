@@ -1,3 +1,12 @@
+import type { TrackUsage } from "./types";
+
+export function formatTrackCaption(track: TrackUsage, now = Date.now()): string {
+  if (track.percent === null) return track.value ?? "정보 없음";
+  const remaining = formatResetRemaining(track.resetsAt, now);
+  const percent = `${Math.round(track.percent)}%`;
+  return remaining ? `${percent} · ${remaining}` : percent;
+}
+
 export function formatResetRemaining(resetsAt: number | null, now = Date.now()): string {
   if (resetsAt === null || !Number.isFinite(resetsAt)) return "";
   const diff = resetsAt * 1000 - now;

@@ -1,8 +1,9 @@
 export type TrackUsage = {
   label: string;
   kind: string;
-  percent: number;
+  percent: number | null;
   resetsAt: number | null;
+  value: string | null;
 };
 
 export type UsageSnapshot = {

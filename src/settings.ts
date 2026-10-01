@@ -1,10 +1,64 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { applyAlwaysOnTop, loadAlwaysOnTop } from "./preferences";
+import { loadHiddenTracks, saveTrackVisibility } from "./display-preferences";
+import { formatTrackCaption } from "./format";
 import { stateLabel, type UsageSnapshot } from "./types";
 
 let autostartEnabled = false;
 let isDevBuild = false;
+let displayOptionsSignature: string | null = null;
+
+function renderDisplayOptions(snap: UsageSnapshot) {
+  const options = $("display-options");
+  const hidden = loadHiddenTracks();
+  if (snap.tracks.length === 0) {
+    displayOptionsSignature = null;
+    const hint = document.createElement("p");
+    hint.className = "settings-hint";
+    hint.textContent = snap.state === "OK"
+      ? "이 계정에 표시할 사용량이 없습니다."
+      : "사용량을 불러오면 표시 항목을 선택할 수 있습니다.";
+    options.replaceChildren(hint);
+    return;
+  }
+  // 스냅샷 재전송 때 DOM을 유지해 키보드 포커스와 스크롤을 보존합니다.
+  const signature = JSON.stringify(snap.tracks.map(({ kind, label }) => [kind, label]));
+  if (signature === displayOptionsSignature) {
+    options.querySelectorAll<HTMLInputElement>("input[data-kind]").forEach((input) => {
+      input.checked = !hidden.has(input.dataset.kind!);
+    });
+    return;
+  }
+  displayOptionsSignature = signature;
+  options.replaceChildren(...snap.tracks.map((track) => {
+    const label = document.createElement("label");
+    label.className = "settings-toggle";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.dataset.kind = track.kind;
+    input.checked = !hidden.has(track.kind);
+    const name = document.createElement("span");
+    name.textContent = track.label;
+    label.append(input, name);
+    input.addEventListener("change", async () => {
+      try {
+        saveTrackVisibility(track.kind, input.checked);
+      } catch {
+        input.checked = !loadHiddenTracks().has(track.kind);
+        setActionStatus("표시 설정을 저장하지 못했습니다. 다시 시도해 주세요.", "error");
+        return;
+      }
+      try {
+        await emit("track-visibility-changed");
+        setActionStatus("표시 설정을 저장했습니다.", "ok");
+      } catch {
+        setActionStatus("설정을 저장했습니다. 위젯을 다시 실행하면 적용됩니다.");
+      }
+    });
+    return label;
+  }));
+}
 
 function $(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -60,6 +114,7 @@ function badgeClass(state: string): string {
 }
 
 function renderAccount(snap: UsageSnapshot) {
+  renderDisplayOptions(snap);
   const badge = $("connection-badge");
   badge.textContent = stateLabel(snap.state);
   badge.className = `settings-badge ${badgeClass(snap.state)}`;
@@ -81,7 +136,7 @@ function renderAccount(snap: UsageSnapshot) {
   usage.replaceChildren(...snap.tracks.map((track) => {
     const line = document.createElement("p");
     line.className = "settings-detail";
-    line.textContent = `${track.label}: ${Math.round(track.percent)}% 사용`;
+    line.textContent = `${track.label}: ${formatTrackCaption(track)}${track.value && track.percent !== null ? ` · ${track.value}` : ""}`;
     return line;
   }));
 }
