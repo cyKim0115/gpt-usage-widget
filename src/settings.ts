@@ -214,6 +214,20 @@ async function boot() {
       void onRefresh();
     });
 
+    $("btn-chatgpt-usage").addEventListener("click", async () => {
+      const btn = $("btn-chatgpt-usage") as HTMLButtonElement;
+      btn.disabled = true;
+      clearActionStatus();
+      try {
+        await invoke("open_chatgpt_usage");
+        setActionStatus("브라우저에서 ChatGPT 사용량 화면을 열었습니다.", "ok");
+      } catch (e) {
+        setActionStatus(String(e), "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     const alwaysOnTopToggle = $("always-on-top-toggle") as HTMLInputElement;
     alwaysOnTopToggle.addEventListener("change", async () => {
       const enabled = alwaysOnTopToggle.checked;

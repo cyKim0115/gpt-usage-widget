@@ -71,6 +71,17 @@ ChatGPT 웹 대화 한도, API 결제 사용량, 토큰 갱신, 별도 OAuth 로
 
 최종 소스로 릴리스 실행 파일을 다시 빌드·설치·재시작했습니다. 설치 파일과 릴리스 파일의 SHA256 일치 및 설치 경로에서 실행 중인 프로세스를 확인했습니다. 별도 읽기 전용 QA의 재검토에서도 추가 수정 사항은 없었습니다.
 
+## 일반 ChatGPT 사용량 연동 확인 (2026-10-01)
+
+- 사용자 요청에 따라 일반 ChatGPT 대화 사용량의 추가 연동 가능성을 확인했습니다.
+- [공식 가격 안내](https://learn.chatgpt.com/docs/pricing)는 ChatGPT Work와 Codex가 한도·크레딧을 공유한다고 설명합니다. 기존 위젯의 한도는 Work에도 해당하므로 화면과 설정의 범위 표시를 바로잡았습니다.
+- 현재 Codex 인증으로 `/backend-api/models`는 HTTP 200이지만 모델 목록 전체에서 잔여 메시지 수를 확인하지 못했습니다. `/backend-api/usage_limits`, `/backend-api/usage-limits`, `/backend-api/usage`는 HTTP 404였습니다. 이 결과는 확인한 경로와 현재 인증에 대한 것이며, 다른 인증이나 비공개 경로까지 없다는 뜻은 아닙니다.
+- Codex 클라이언트의 `/wham/profiles/me` 계정 토큰 활동 조회도 확인했습니다. 이 프로필의 통계는 일반 ChatGPT 대화의 메시지 잔여량을 입증하지 않으므로 대화 한도로 표시하지 않았습니다. 인증·계정 식별자·응답 원문은 로그나 파일에 기록하지 않았습니다.
+- [OpenAI의 사용량 관리 안내](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt)에 나온 `https://chatgpt.com/settings/usage`를 설정에서 여는 기능을 추가했습니다. 고정 URL만 기본 브라우저로 열고 인증 정보를 전달하지 않습니다. 브라우저에 로그인한 계정 기준입니다.
+- 일반 ChatGPT 잔여 메시지·딥 리서치·이미지 생성의 사용 한도는 검증된 조회 응답을 확보하지 못했으므로 새 수치나 게이지를 만들지 않았습니다. 현재 확인된 범위와 제약은 README와 설정에 명시했습니다.
+
+검증: 프런트엔드 테스트 7개, Rust 테스트 18개, Clippy, 화면 빌드 통과. 실제 HTML/TypeScript와 가상 IPC로 공유 한도 문구, 사용량 페이지 버튼의 명령 전달·성공/실패 안내·버튼 재활성화, 설정 창의 추가 사용량 조회 없음, 기존 표시 선택·색상·포커스·스크롤을 확인했습니다. 버튼의 브라우저 실행 자체는 이 가상 IPC 테스트의 검증 대상에 포함되지 않습니다.
+
 ## Git
 
-Git 사용자: `cyKim <cykim@blackstormcompany.com>` (claude-usage-widget와 동일). 두 참고 저장소의 이메일이 달라 선택을 요청했고, 응답이 없어 기존 기본값과 같은 회사 이메일을 사용한다고 안내함. 현재 저장소의 local 설정만 변경.
+Git 작성자: 사용자가 현재 저장소에 설정한 `cyKim <76chanyoung@gmail.com>`. 사용자 요청에 따라 아직 게시하지 않은 기존 커밋의 작성자도 이 설정으로 갱신합니다. 공개 저장소는 `cyKim0115/gpt-usage-widget`이며, Git 설정 자체는 변경하지 않습니다.

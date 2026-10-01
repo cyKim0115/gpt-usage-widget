@@ -30,8 +30,8 @@
       <section class="settings-card">
         <h2 class="settings-card-title">계정</h2>
         <p class="settings-hint">
-          Codex에 로그인한 ChatGPT 계정의 코딩 사용 한도를 표시합니다.
-          ChatGPT 웹 대화 한도는 포함하지 않습니다.
+          ChatGPT Work와 Codex가 공유하는 사용 한도를 표시합니다.
+          일반 ChatGPT 대화의 잔여 메시지 수는 현재 위젯에서 조회하지 않습니다.
         </p>
         <div class="settings-field">
           <span class="settings-field-label" id="account-email">—</span>
@@ -40,7 +40,9 @@
         <div id="account-usage"></div>
         <div class="settings-actions">
           <button id="btn-refresh" class="btn secondary" type="button">사용량 새로고침</button>
+          <button id="btn-chatgpt-usage" class="btn secondary" type="button">ChatGPT 사용량 화면 열기</button>
         </div>
+        <p class="settings-hint">사용량 화면은 브라우저에 로그인한 ChatGPT 계정으로 열립니다.</p>
       </section>
 
       <section class="settings-card">

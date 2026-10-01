@@ -1,9 +1,10 @@
 # GPT Usage Widget
 
-Windows 바탕화면에서 **ChatGPT 계정의 Codex 사용 한도**를 보는 플로팅 위젯입니다.
+Windows 바탕화면에서 **ChatGPT Work·Codex의 공유 사용 한도**를 보는 플로팅 위젯입니다.
 `cursor-usage-widget`의 사용률 표시 방식과 `claude-usage-widget`의 Tauri 창·설정·설치 구조를 바탕으로 만들었습니다.
 
-**ChatGPT 웹 대화 사용량이나 OpenAI API 요금은 표시하지 않습니다.**
+**일반 ChatGPT 대화의 잔여 메시지 수나 OpenAI API 요금은 현재 표시하지 않습니다.**
+ChatGPT Work는 Codex와 같은 한도를 사용합니다. [OpenAI 공식 안내](https://learn.chatgpt.com/docs/pricing).
 
 ## 실행
 
@@ -25,6 +26,7 @@ Windows 바탕화면에서 **ChatGPT 계정의 Codex 사용 한도**를 보는 �
 - 5분마다 자동 갱신하며, 남은 시간 표시는 매분 갱신합니다.
 - 위젯을 드래그하면 이동하며, 위치는 다음 실행에도 복원합니다.
 - **우클릭 → 설정**에서 계정·플랜·사용률 확인, 수동 새로고침, 항상 위에 표시, Windows 자동 실행을 설정합니다.
+- 설정의 **ChatGPT 사용량 화면 열기**로 공식 사용량 페이지를 기본 브라우저에서 열 수 있습니다. 브라우저에 로그인한 계정이 사용됩니다.
 - **우클릭 → 종료**로 앱을 종료합니다. 설정 창의 닫기와 `Esc`는 설정 창만 숨깁니다.
 - 개발 모드에서는 Windows 자동 실행을 변경할 수 없습니다. 자동 실행은 설치된 릴리스 경로를 사용합니다.
 

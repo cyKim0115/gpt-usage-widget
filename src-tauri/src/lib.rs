@@ -15,6 +15,23 @@ use usage::{error_snapshot, fetch_usage, UsageError, UsageSnapshot};
 const POLL_INTERVAL_MS: u64 = 300_000;
 const SETTINGS_LABEL: &str = "settings";
 
+/// 공식 사용량 페이지 한 곳만 엽니다. 토큰이나 계정 ID를 URL에 넣지 않습니다.
+#[tauri::command]
+fn open_chatgpt_usage() -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new("rundll32.exe")
+        .args([
+            "url.dll,FileProtocolHandler",
+            "https://chatgpt.com/settings/usage",
+        ])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW: 브라우저 실행 시 콘솔 숨김
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| {
+            "ChatGPT 사용량 화면을 열지 못했습니다. 기본 브라우저 설정을 확인하세요.".into()
+        })
+}
+
 #[tauri::command]
 async fn get_usage() -> UsageSnapshot {
     tauri::async_runtime::spawn_blocking(read_usage)
@@ -166,6 +183,7 @@ pub fn run() {
             quit_app,
             open_settings_window,
             close_settings_window,
+            open_chatgpt_usage,
             is_dev_build,
             enable_autostart,
             disable_autostart,
