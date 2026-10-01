@@ -1,0 +1,13 @@
+{
+  "plan_type": "pro",
+  "rate_limit": {"primary_window": {"used_percent": 10, "limit_window_seconds": 18000}},
+  "code_review_rate_limit": {"primary_window": {"used_percent": 75, "limit_window_seconds": 604800}},
+  "additional_rate_limits": [{
+    "limit_name": "Extra model",
+    "metered_feature": "extra-model",
+    "rate_limit": {
+      "primary_window": {"used_percent": 90, "limit_window_seconds": 18000},
+      "secondary_window": {"used_percent": 15, "limit_window_seconds": 604800}
+    }
+  }]
+}

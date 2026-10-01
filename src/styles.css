@@ -1,0 +1,402 @@
+:root {
+  color-scheme: dark;
+  --bg: rgba(22, 24, 28, 0.92);
+  --fg: #e8eaed;
+  --muted: #9aa0a6;
+  --bar: #2a2f36;
+  /* 기본 녹색, 70% 주황, 90% 빨강으로 사용률을 구분합니다. */
+  --fill: #54c9a6;
+  --fill-warn: #e0a95b;
+  --fill-hot: #e0524a;
+  --border: rgba(255, 255, 255, 0.08);
+  font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  user-select: none;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  width: 100vw;
+}
+
+/* 높이를 지정하지 않습니다. 트랙 수에 따른 실제 높이를 main.ts가 재서
+   창 크기를 맞추므로, 여기서 100%를 잡으면 측정값이 창 높이에 묶입니다. */
+.widget {
+  padding: 10px 12px 8px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.header,
+.footer,
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.plan {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.track {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+
+/* 지금 한도에 걸리는 창을 한눈에 구분합니다. */
+.track.active .label {
+  color: var(--fg);
+}
+
+.caption {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bar);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--fill);
+  transition: width 0.35s ease;
+}
+
+.fill.warn {
+  background: var(--fill-warn);
+}
+
+.fill.hot {
+  background: var(--fill-hot);
+}
+
+.empty {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+
+.status {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.widget.error .status {
+  color: var(--fill-hot);
+}
+
+.context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+.context-backdrop.hidden {
+  display: none;
+}
+
+.context-menu {
+  position: fixed;
+  min-width: 148px;
+  max-width: 260px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(18, 20, 24, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 1000;
+}
+
+.context-menu.hidden {
+  display: none;
+}
+
+.menu-item {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.menu-item.danger {
+  color: #ffb4ab;
+}
+
+/* ── 설정 창 ──────────────────────────────────────────────────────────
+   위젯은 transparent 창이라 html/body 배경이 투명하고 스크롤도 막혀 있습니다.
+   설정 창은 일반 창이라 그 전역 규칙을 되돌려야 합니다. 선택자에 클래스를
+   더해 뒤에 오는 위젯 규칙보다 우선순위를 높입니다. */
+body.settings-window-body {
+  width: auto;
+  min-height: 100vh;
+  overflow-y: auto;
+  background: #16181c;
+  color: var(--fg);
+}
+
+/* 계정 이메일은 복사해 쓸 수 있어야 합니다. 위젯의 user-select: none 해제. */
+.settings-window,
+.settings-window * {
+  user-select: text;
+}
+
+.settings-window {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.settings-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-subtitle {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.settings-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+
+.settings-badge--ok {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.settings-badge--muted {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.settings-badge--error {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.settings-status {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+.settings-status--ok {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.settings-status--error {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.1);
+  color: #fecaca;
+}
+
+.settings-status.hidden {
+  display: none;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+}
+
+.settings-card-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  word-break: break-all;
+}
+
+.settings-detail {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.settings-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.settings-hint--error {
+  color: #f87171;
+}
+
+.settings-hint.hidden {
+  display: none;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.settings-toggle input {
+  accent-color: var(--fill);
+}
+
+.settings-footer--window {
+  padding-top: 4px;
+}
+
+.btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn.primary {
+  background: #267f68;
+  color: #fff;
+}
+
+.btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+}
+
+.btn.wide {
+  width: 100%;
+}
+
+.btn:hover {
+  filter: brightness(1.08);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
