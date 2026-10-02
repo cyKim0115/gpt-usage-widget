@@ -142,13 +142,13 @@ function render(snap: UsageSnapshot) {
   const hhmm = formatUpdatedAt(snap.fetchedAt);
   const status = $("status");
   if (snap.state === "OK") {
-    status.textContent = `${hhmm} 갱신`;
+    status.textContent = `${hhmm} 갱신${snap.activityError ? " · 활동 통계 조회 실패" : ""}`;
   } else if (snap.state === "NeedLogin") {
     status.textContent = "Codex 로그인 필요";
   } else {
     status.textContent = "갱신 실패 · 설정에서 확인하세요";
   }
-  status.title = snap.error ?? "";
+  status.title = snap.error ?? snap.activityError ?? "";
 
   void syncWindowHeight();
 
@@ -165,7 +165,7 @@ function refresh(): Promise<void> {
       render(await invoke<UsageSnapshot>("get_usage"));
     } catch {
       render({ state: "FetchError", accountEmail: null, planLabel: null,
-        tracks: [], error: "사용량 조회를 완료하지 못했습니다.", fetchedAt: null });
+        tracks: [], error: "사용량 조회를 완료하지 못했습니다.", activityError: null, fetchedAt: null });
     } finally {
       refreshInFlight = null;
     }

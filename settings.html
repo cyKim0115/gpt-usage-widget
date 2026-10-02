@@ -31,6 +31,7 @@
         <h2 class="settings-card-title">계정</h2>
         <p class="settings-hint">
           ChatGPT Work와 Codex가 공유하는 사용 한도를 표시합니다.
+          Codex 활동의 토큰·연속 사용일도 표시합니다.
           일반 ChatGPT 대화의 잔여 메시지 수는 현재 위젯에서 조회하지 않습니다.
         </p>
         <div class="settings-field">
@@ -38,6 +39,7 @@
           <p class="settings-detail" id="account-plan">불러오는 중…</p>
         </div>
         <div id="account-usage"></div>
+        <p id="activity-hint" class="settings-hint settings-hint--error hidden" role="status"></p>
         <div class="settings-actions">
           <button id="btn-refresh" class="btn secondary" type="button">사용량 새로고침</button>
           <button id="btn-chatgpt-usage" class="btn secondary" type="button">ChatGPT 사용량 화면 열기</button>
@@ -56,7 +58,7 @@
 
       <section class="settings-card">
         <h2 id="display-options-title" class="settings-card-title">표시할 사용량</h2>
-        <p class="settings-hint">서버가 제공하는 항목만 나타납니다. 선택은 즉시 반영되며 다음 실행에도 유지됩니다.</p>
+        <p class="settings-hint">서버가 제공하는 항목만 나타납니다. 선택은 즉시 반영되며 다음 실행에도 유지됩니다. Codex 활동은 사용한 토큰·사용일 통계이며 잔여 메시지 한도가 아닙니다. 최근 일일 토큰은 서버의 집계 날짜를 함께 표시합니다.</p>
         <div id="display-options" class="settings-display-options" role="group" aria-labelledby="display-options-title">
           <p class="settings-hint">불러오는 중…</p>
         </div>

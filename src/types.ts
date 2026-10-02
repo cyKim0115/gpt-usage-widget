@@ -12,6 +12,7 @@ export type UsageSnapshot = {
   planLabel: string | null;
   tracks: TrackUsage[];
   error: string | null;
+  activityError: string | null;
   fetchedAt: number | null;
 };
 

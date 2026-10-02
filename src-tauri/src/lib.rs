@@ -1,3 +1,4 @@
+mod activity;
 mod auth;
 mod install;
 mod usage;

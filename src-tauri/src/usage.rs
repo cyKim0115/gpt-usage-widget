@@ -6,6 +6,7 @@ use thiserror::Error;
 use crate::auth::{now_seconds, Credentials};
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const ACTIVITY_URL: &str = "https://chatgpt.com/backend-api/wham/profiles/me";
 
 #[derive(Debug, Error)]
 pub enum UsageError {
@@ -41,6 +42,7 @@ pub struct UsageSnapshot {
     pub plan_label: Option<String>,
     pub tracks: Vec<TrackUsage>,
     pub error: Option<String>,
+    pub activity_error: Option<String>,
     pub fetched_at: Option<i64>,
 }
 
@@ -303,6 +305,7 @@ pub fn parse_usage(raw: &str, now: i64) -> Result<UsageSnapshot, UsageError> {
         plan_label: Some(plan_label(&response.plan_type)),
         tracks,
         error: None,
+        activity_error: None,
         fetched_at: Some(now),
     })
 }
@@ -316,13 +319,20 @@ fn status_error(status: u16) -> UsageError {
     }
 }
 
-pub fn fetch_usage(credentials: &Credentials) -> Result<UsageSnapshot, UsageError> {
+fn fetch_json(
+    credentials: &Credentials,
+    url: &str,
+    timeout: Duration,
+) -> Result<String, UsageError> {
+    // ureq의 기본 연결 제한은 전체 요청 제한보다 우선하므로 둘 다 명시합니다.
     let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(25))
+        .timeout(timeout)
+        .timeout_connect(timeout)
         .redirects(0) // 인증 헤더를 다른 호스트로 전달하지 않습니다.
         .build();
     let response = agent
-        .get(USAGE_URL)
+        .get(url)
+        .timeout(timeout)
         .set(
             "Authorization",
             &format!("Bearer {}", credentials.access_token),
@@ -338,8 +348,33 @@ pub fn fetch_usage(credentials: &Credentials) -> Result<UsageSnapshot, UsageErro
     if response.status() != 200 {
         return Err(status_error(response.status()));
     }
-    let raw = response.into_string().map_err(|_| UsageError::Parse)?;
-    parse_usage(&raw, now_seconds())
+    response.into_string().map_err(|_| UsageError::Parse)
+}
+
+fn append_activity_result(snapshot: &mut UsageSnapshot, result: Result<String, UsageError>) {
+    match result.and_then(|raw| crate::activity::parse_activity(&raw)) {
+        Ok(tracks) => snapshot.tracks.extend(tracks),
+        Err(error) => {
+            snapshot.activity_error = Some(format!(
+                "Codex 활동 통계를 불러오지 못했습니다. 기존 한도·크레딧 조회는 정상입니다. {error}"
+            ));
+        }
+    }
+}
+
+pub fn fetch_usage(credentials: &Credentials) -> Result<UsageSnapshot, UsageError> {
+    // 선택적 활동 조회가 기존 한도 조회를 지연시키거나 실패시키지 않도록 병렬 조회합니다.
+    std::thread::scope(|scope| {
+        let activity =
+            scope.spawn(|| fetch_json(credentials, ACTIVITY_URL, Duration::from_secs(8)));
+        let raw = fetch_json(credentials, USAGE_URL, Duration::from_secs(25))?;
+        let mut snapshot = parse_usage(&raw, now_seconds())?;
+        append_activity_result(
+            &mut snapshot,
+            activity.join().unwrap_or(Err(UsageError::Network)),
+        );
+        Ok(snapshot)
+    })
 }
 
 pub fn error_snapshot(state: &str, message: String) -> UsageSnapshot {
@@ -349,6 +384,7 @@ pub fn error_snapshot(state: &str, message: String) -> UsageSnapshot {
         plan_label: None,
         tracks: Vec::new(),
         error: Some(message),
+        activity_error: None,
         fetched_at: None,
     }
 }
@@ -374,6 +410,7 @@ mod tests {
                 track.label, track.percent, track.value
             );
         }
+        assert!(snapshot.activity_error.is_none(), "활동 통계 조회 실패");
     }
 
     #[test]
@@ -518,5 +555,45 @@ mod tests {
         assert!(matches!(status_error(403), UsageError::Forbidden));
         assert!(matches!(status_error(429), UsageError::RateLimited));
         assert!(matches!(status_error(503), UsageError::Http(503)));
+    }
+
+    #[test]
+    fn activity_is_merged_with_existing_limits_and_credits() {
+        let mut snapshot =
+            parse_usage(include_str!("../tests/fixtures/credits.json"), 100).unwrap();
+        let original = serde_json::to_value(&snapshot.tracks).unwrap();
+        append_activity_result(
+            &mut snapshot,
+            Ok(include_str!("../tests/fixtures/activity.json").into()),
+        );
+        assert_eq!(snapshot.tracks.len(), 12);
+        assert_eq!(
+            serde_json::to_value(&snapshot.tracks[..6]).unwrap(),
+            original
+        );
+        assert!(snapshot.activity_error.is_none());
+        assert_eq!(snapshot.fetched_at, Some(100));
+    }
+
+    #[test]
+    fn optional_activity_failures_preserve_quota_and_report_a_separate_warning() {
+        for result in [
+            Err(UsageError::Network),
+            Err(UsageError::Unauthorized),
+            Err(UsageError::Forbidden),
+            Err(UsageError::RateLimited),
+            Ok("private-invalid-response".into()),
+        ] {
+            let mut snapshot =
+                parse_usage(include_str!("../tests/fixtures/credits.json"), 100).unwrap();
+            let original = serde_json::to_value(&snapshot.tracks).unwrap();
+            append_activity_result(&mut snapshot, result);
+            assert_eq!(serde_json::to_value(&snapshot.tracks).unwrap(), original);
+            assert_eq!(snapshot.state, "OK");
+            assert!(snapshot.error.is_none());
+            let warning = snapshot.activity_error.unwrap();
+            assert!(warning.contains("활동 통계"));
+            assert!(!warning.contains("private-invalid-response"));
+        }
     }
 }

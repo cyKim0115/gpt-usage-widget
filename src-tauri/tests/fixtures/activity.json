@@ -1,0 +1,13 @@
+{
+  "stats": {
+    "lifetime_tokens": 12345678,
+    "peak_daily_tokens": 1234567,
+    "longest_running_turn_sec": 6559,
+    "current_streak_days": 4,
+    "longest_streak_days": 12,
+    "daily_usage_buckets": [
+      { "start_date": "2026-10-01", "tokens": 1234567 },
+      { "start_date": "2026-09-30", "tokens": 123456 }
+    ]
+  }
+}

@@ -115,6 +115,9 @@ function badgeClass(state: string): string {
 
 function renderAccount(snap: UsageSnapshot) {
   renderDisplayOptions(snap);
+  const activityHint = $("activity-hint");
+  activityHint.textContent = snap.activityError ?? "";
+  activityHint.classList.toggle("hidden", !snap.activityError);
   const badge = $("connection-badge");
   badge.textContent = stateLabel(snap.state);
   badge.className = `settings-badge ${badgeClass(snap.state)}`;
