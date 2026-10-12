@@ -100,6 +100,49 @@ ChatGPT 웹 대화 한도, API 결제 사용량, 토큰 갱신, 별도 OAuth 로
 
 최종 소스로 릴리스 실행 파일을 다시 빌드·설치·재시작했습니다. 릴리스와 설치 파일의 SHA256 일치 및 설치 경로의 실행 프로세스를 확인했습니다.
 
+## ChatGPT 웹 세션 스파이크 — no-go (2026-10-12)
+
+- rag `docs/assets/2026-10-12-widget-dedicated-profile-login-plan.md` 5장 Phase 0입니다. 전용 Chrome 프로필로 로그인받은 웹 세션이 Codex 토큰으로 못 얻는 ChatGPT 사용 한도(대화 잔여량·딥 리서치·이미지 생성)를 주는지 확인했습니다.
+- 스크립트는 Git 제외 경로 `.test-dist/spike_web_session.mjs`, 결과는 `.test-dist/spike-web-report.json`입니다. 경로·키 이름·타입·상태 코드만 남겼고 토큰·쿠키·응답 값·이메일은 출력하거나 저장하지 않았습니다.
+
+### 로그인
+
+- 프로필 `%LOCALAPPDATA%\GPTUsageWidget\login-profile`, Chrome 154.0.8037.98. 사용자가 이메일 코드로 직접 로그인했습니다.
+- `--remote-debugging-port=0`을 켠 창에서는 `--enable-automation` 없이도 `navigator.webdriver`가 true였고, auth.openai.com의 이메일 코드 요청이 Cloudflare 403 챌린지로 막혔습니다.
+- 포트 없이 띄운 창(계획 2.4-7 대체 흐름)에서는 로그인됐습니다. 세션 쿠키 `__Secure-next-auth.session-token.0`·`.1`은 session 쿠키가 아니며 만료가 약 90일 뒤입니다.
+
+### 기록한 요청
+
+로그인 뒤 포트를 켠 창에서 `/settings/usage`, `/`, `/#settings`, `/codex/settings/usage`를 열고 `/backend-api/` 28개 경로를 기록했습니다.
+
+- 이름상 ChatGPT 사용 한도 후보는 `GET /backend-api/pageConfigs/usage_limits` 하나였습니다. 브라우저 안에서도 403 HTML이어서 응답 구조를 확인하지 못했습니다. 같은 창에서 `settings/is_adult`, `user_granular_consent`, `payments/payment_methods` 등 7개 경로도 403 HTML이었습니다.
+- 200 JSON 응답에서 일반 대화 잔여 메시지·딥 리서치·이미지 생성 한도로 볼 필드는 없었습니다. `wham/usage`는 위젯이 쓰는 응답과 같은 구조입니다.
+- 이번 기록에는 `conversation/init` 요청이 나타나지 않았습니다.
+
+### 평문 HTTP 재호출
+
+Node fetch, 리디렉션 끔, UA는 위젯과 같은 `gpt-usage-widget/0.1.0`입니다. 기존 Codex 토큰(`auth.json` Bearer + `ChatGPT-Account-Id`)으로 먼저 호출했습니다. 웹 토큰은 `/api/auth/session` 평문 호출이 막혀 브라우저가 보낸 요청 헤더에서 메모리로만 가져와 시험했습니다.
+
+| 경로 | 브라우저 | Codex 토큰 | 웹 토큰 |
+|---|---|---|---|
+| `GET /backend-api/pageConfigs/usage_limits` | 403 HTML | 403 Cloudflare | 403 Cloudflare |
+| `GET /backend-api/accounts/check/v4-2023-04-27` | 200 | 403 Cloudflare | 403 Cloudflare |
+| `GET /backend-api/settings/user` | 200 | 403 Cloudflare | 403 Cloudflare |
+| `GET /backend-api/me` | 200 | 200 | 200 |
+| `GET /backend-api/wham/usage` | 200 | 200 | 200 |
+| `GET /backend-api/wham/rate-limit-reset-credits` | 200 | 200 | 200 |
+| `GET /backend-api/wham/usage/credit-usage-events` | 200 | 200 | 200 |
+| `GET /backend-api/wham/usage/chatpass/apps` | 200 | 200 | 200 |
+| `GET /backend-api/ps/plugins/installed` | 200 | 200 | 200 |
+| `GET /backend-api/files/library/mounted/capabilities` | 200 | 200 | 200 |
+| `GET /api/auth/session` (쿠키) | — | — | 403 Cloudflare |
+
+### 판정
+
+- no-go. 웹 토큰이 통과한 경로는 모두 Codex 토큰으로도 같은 결과였습니다. 웹 세션으로만 얻어지는 한도 데이터를 평문 HTTP로 가져오지 못했고, 쿠키로 웹 토큰을 받는 `/api/auth/session`도 평문 HTTP에서 Cloudflare에 막혔습니다. 전용 프로필 로그인과 "ChatGPT 웹" 소스는 추가하지 않습니다.
+- `pageConfigs/usage_limits`는 디버깅 포트를 켠 브라우저 안에서도 막혀, 읽으려면 자동화 표시를 숨기는 방식이 필요합니다. 봇 탐지 회피에 해당하므로 시험하지 않았습니다.
+- 재검토 조건: 한도 경로가 Cloudflare 없이 응답하게 되거나, Codex 클라이언트가 ChatGPT 대화 한도 조회를 제공할 때.
+
 ## Git
 
 Git 작성자: 사용자가 현재 저장소에 설정한 `cyKim <76chanyoung@gmail.com>`. 사용자 요청에 따라 아직 게시하지 않은 기존 커밋의 작성자도 이 설정으로 갱신합니다. 공개 저장소는 `cyKim0115/gpt-usage-widget`이며, Git 설정 자체는 변경하지 않습니다.
