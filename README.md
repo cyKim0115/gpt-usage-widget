@@ -1,5 +1,10 @@
 # GPT Usage Widget
 
+![Windows 10 · 11](https://img.shields.io/badge/Windows-10%20%C2%B7%2011-3f6150)
+![Tauri 2](https://img.shields.io/badge/Tauri-2-3f6150)
+![Codex login](https://img.shields.io/badge/data-Codex%20login-3f6150)
+![View only](https://img.shields.io/badge/mode-view-96bea1)
+
 Windows 바탕화면에서 **ChatGPT Work·Codex의 공유 사용 한도**를 보는 플로팅 위젯입니다.
 `cursor-usage-widget`의 사용률 표시 방식과 `claude-usage-widget`의 Tauri 창·설정·설치 구조를 바탕으로 만들었습니다.
 
